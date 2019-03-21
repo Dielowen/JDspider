@@ -10,7 +10,9 @@ $jds = new jds();
 
 // 京东分类页URL
 $uri = 'https://list.jd.com/list.html?cat=670,12800,12801&page=1&delivery=1';
-// $uri = 'https://list.jd.com/list.html?cat=670,12800,12801';
+
+// 京东搜索页URL
+// $uri = 'https://search.jd.com/Search?keyword=微软键盘&enc=utf-8';
 
 // 定义获取多少页内容
 $page = 2;

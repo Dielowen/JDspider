@@ -1,11 +1,7 @@
 <?php
 
-// 通过京东分类页或搜索页, 抓取商品数据
-// 分类页前缀 list.jd.com
-// 搜索页前缀 search,jd.com
-
 class jds {
-    private $jsonDir;
+    private $jsonDir;           // json文件存储目录
     private $listHost;          // 分类页host
     private $searchHost;        // 搜索页host
     private $priceUri;          // 商品价格接口
@@ -16,7 +12,7 @@ class jds {
         $this->jsonDir = 'jsonfiles';
         $this->listHost = 'list.jd.com';
         $this->searchHost = 'search.jd.com';
-        $this->priceUir = 'https://p.3.cn/prices/mgets?skuIds=J_';
+        $this->priceUri = 'https://p.3.cn/prices/mgets?skuIds=J_';
         $this->infoUri = 'https://question.jd.com/question/getQuestionAnswerList.action?page=99999&productId=';
     }
 
@@ -35,31 +31,42 @@ class jds {
             for($k=0;$k<$page;$k++){
                 $param['page'] = $pn+$k;
                 $uri = $link.http_build_query($param);
+                
                 $doc = self::curlGet($uri);
 
                 $tmp = self::getListDom($doc);
                 $sku = array_merge_recursive($sku,$tmp);
             }  
-            
-            // self::getJsonFile(json_encode($sku))
-            
-            $skuInfo = self::getSkuInfo($sku);
-            
-            return $skuInfo;
-            
+        
+        // self::getJsonFile(json_encode($sku))
 
         }else if($type === 'search'){
-            echo '搜索页';
+            $param['scrolling'] = 'y';
+            $page = $page*2;
+            for($k=0;$k<$page;$k++){
+                $param['page'] = $pn+$k;
+                $uri = $link.http_build_query($param);
+
+                $doc = self::curlGet($uri);
+
+                $tmp = self::getSearchDom($doc);
+                $sku = array_merge_recursive($sku,$tmp);
+            }
         }
+
+        $skuInfo = self::getSkuInfo($sku);
+            
+        return $skuInfo;
     }
     
+    // 处理URL
     private function getHost($uri){
         $result = [];
         $url = parse_url($uri);
-        $type = $url['host'];
-        $link = $url['scheme'].'://'.$url['host'].$url['path'].'?';
+        $type = $url['host'];                                           // 获取主机名
+        $link = $url['scheme'].'://'.$url['host'].$url['path'].'?';     // 拼接请求前缀地址
 
-        parse_str($url['query'],$param);
+        parse_str($url['query'],$param);                                // 提取参数
         
         if($type === $this->listHost){
             $result['type'] = 'list';
@@ -76,66 +83,78 @@ class jds {
     
     }
 
-
+    // 匹配分类列表页
     private function getListDom($page){
-        // $pattern = '/class=\"gl-item\"[\s\S]*gl-i-wrap j-sku-item\" data-sku="(.*)\"[\s\S]*img width=\"220\" height=\"220\" data-img=\"1\"[\s\S]*=\"(.*)\"/U';
         $pattern = '/j-sku-item\"[\s\S]*data-sku="(.*)\"/Ui';
-
         preg_match_all($pattern, $page, $result);
 
         return $result[1];
 
     }
 
+
+    // 匹配搜索列表页
+    private function getSearchDom($page){
+        $pattern = '/gl-item\"[\s\S]*data-sku="(.*)\"/Ui';
+        preg_match_all($pattern, $page, $result);
+        return $result[1];
+
+    }
+
+
     private function getSkuInfo($sku=null){
         $result = [];
         foreach($sku as $skuID){
-            $priceUri = $this->priceUir.$skuID;
-            $infoUri = $this->infoUri.$skuID;
+            $priceUri = $this->priceUri.$skuID;    // 拼接商品价格接口
+            $infoUri = $this->infoUri.$skuID;      // 拼接商品信息接口
             
             $price = json_decode(self::curlGet($priceUri),true)[0];
             $info = json_decode(self::curlGet($infoUri),true)['skuInfo'];
             
-            
+            // 处理curl请求异常
             while(empty($info)){
                 $info = json_decode(self::curlGet($infoUri),true)['skuInfo'];
             }
             
 
             $result[] = [
-                'sku' => $skuID,
-                'priceNormal' => $price['p'],
-                'pricePlus'=> empty($price['tpp'])?$price['p']:$price['tpp'],
-
-                'brand' => $info['brandName'],
-                'model' => $info['shortName'],
-                'name' => $info['fullName'],
-                'imgUrl' => $info['imgUrl'],
-                'fcID' => $info['firstCategory'],
-                'scID' => $info['secondCategory'],
-                'tcID' => $info['thirdCategory'],
-                'fcName' => $info['firstCategoryName'],
-                'tcName' => $info['secondCategoryName'],
-                'tcName' => $info['thirdCategoryName'],
-
+                'sku' => $skuID,                                     // 京东商品标识ID
+                'priceNormal' => $price['p'],                        // 售价
+                'pricePlus'=>                       
+                    empty($price['tpp'])?$price['p']:$price['tpp'],  // plus售价
+                'brand' => $info['brandName'],                       // 品牌
+                'model' => $info['shortName'],                       // 型号
+                'name' => $info['fullName'],                         // 商品全名
+                'imgUrl' => $info['imgUrl'],                         // 商品图
+                'fcID' => $info['firstCategory'],                    // 一级分类ID
+                'scID' => $info['secondCategory'],                   // 二级分类ID
+                'tcID' => $info['thirdCategory'],                    // 三级分类ID
+                'fcName' => $info['firstCategoryName'],              // 一级分类名
+                'scName' => $info['secondCategoryName'],             // 二级分类名
+                'tcName' => $info['thirdCategoryName'],              // 三级分类名
             ];
-            
         }
 
         return $result;
 
     }
 
+
+    // 模拟百度蜘蛛进行curl
     private function curlGet($uri){
         $ch = curl_init();
 
-        curl_setopt($ch, CURLOPT_URL,$uri);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, false);
-        curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
-        curl_setopt($ch, CURLOPT_TIMEOUT_MS, 30000);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $ip = '60.172.229.61';
+        $timeout = 15;
+
+        curl_setopt($ch,CURLOPT_URL,$uri);
+        curl_setopt($ch,CURLOPT_TIMEOUT, $timeout);
+        curl_setopt($ch,CURLOPT_HTTPHEADER,array('X-FORWARDED-FOR:'.$ip.'','CLIENT-IP:'.$ip.''));
+        curl_setopt($ch,CURLOPT_USERAGENT,"Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)");
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+        curl_setopt($ch,CURLOPT_HEADER,0);
+        curl_setopt ($ch, CURLOPT_REFERER, "https://www.baidu.com/ "); 
+        curl_setopt($ch,CURLOPT_CONNECTTIMEOUT,$timeout);
 
         $result = curl_exec($ch);
 
@@ -145,7 +164,7 @@ class jds {
     }
     
 
-    // save json file
+    // 保存json预览文件
     private function getJsonFile($json){
         is_dir($this->jsonDir) || mkdir($this->jsonDir, 0755);
         file_put_contents($this->jsonDir.'/'.time().'.json',$json);
