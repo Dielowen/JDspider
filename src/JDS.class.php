@@ -5,8 +5,7 @@ class jds {
     private $listHost;          // 分类页host
     private $searchHost;        // 搜索页host
     private $priceUri;          // 商品价格接口
-    private $infoUri;           // 商品信息接口
-
+    private $infoUri;           // 商品信息接
 
     public function __construct(){
         $this->jsonDir = 'jsonfiles';
@@ -16,12 +15,23 @@ class jds {
         $this->infoUri = 'https://question.jd.com/question/getQuestionAnswerList.action?page=99999&productId=';
     }
 
+
+
+    /**
+     * getSkuList
+     * @method               核心操作函数
+     * @param   str   $uri   请求地址, 分类页地址或搜索页地址
+     * @param   int   $page  需要获取的页数, 每页60条sku
+     *
+     * @return arr           商品信息
+     */
     public function getSkuList($uri=null,$page=null){
+        // 重构URL
         $host = self::getHost($uri);
 
-        $type = $host['type'];
+        $type  = $host['type'];
         $param = $host['param'];
-        $link = $host['link'];
+        $link  = $host['link'];
         if(!array_key_exists('page',$param)){
             $param['page'] = 1;
         }
@@ -41,8 +51,8 @@ class jds {
         // self::getJsonFile(json_encode($sku))
 
         }else if($type === 'search'){
-            $param['scrolling'] = 'y';
-            $page = $page*2;
+            $param['scrolling'] = 'y';  // 搜索页开启scrolling, 每页获取30条内容
+            $page = $page*2;            // 页码*2, 获取完整一页数据
             for($k=0;$k<$page;$k++){
                 $param['page'] = $pn+$k;
                 $uri = $link.http_build_query($param);
@@ -59,7 +69,15 @@ class jds {
         return $skuInfo;
     }
     
-    // 处理URL
+
+
+    /**
+     * getHost
+     * @method              重构URL
+     * @param  str   $uri   请求地址
+     *
+     * @return arr          URL结构
+     */
     private function getHost($uri){
         $result = [];
         $url = parse_url($uri);
@@ -76,15 +94,23 @@ class jds {
             $result['type'] = false;
         }
     
-
         $result['param'] = $param;
         $result['link'] = $link;
         return $result;
     
     }
 
-    // 匹配分类列表页
+
+
+    /**
+     * getListDom
+     * @method            获取商品分类页SKU
+     * @param  str  $page 页面DOM
+     *
+     * @return arr        页面SKU
+     */
     private function getListDom($page){
+        // 匹配SKU
         $pattern = '/j-sku-item\"[\s\S]*data-sku="(.*)\"/Ui';
         preg_match_all($pattern, $page, $result);
 
@@ -93,8 +119,16 @@ class jds {
     }
 
 
-    // 匹配搜索列表页
+
+    /**
+     * getSearchDom
+     * @method           获取商品搜索页SKU
+     * @param  str $page 页面DOM
+     *
+     * @return arr       页面SKU
+     */
     private function getSearchDom($page){
+        // 匹配SKU
         $pattern = '/gl-item\"[\s\S]*data-sku="(.*)\"/Ui';
         preg_match_all($pattern, $page, $result);
         return $result[1];
@@ -102,21 +136,28 @@ class jds {
     }
 
 
+
+    /**
+     * getSkuInfo
+     * @mehtod          获取商品详情
+     * @param  arr $sku SKU
+     *
+     * @return arr      商品信息
+     */
     private function getSkuInfo($sku=null){
         $result = [];
         foreach($sku as $skuID){
             $priceUri = $this->priceUri.$skuID;    // 拼接商品价格接口
             $infoUri = $this->infoUri.$skuID;      // 拼接商品信息接口
             
-            $price = json_decode(self::curlGet($priceUri),true)[0];
-            $info = json_decode(self::curlGet($infoUri),true)['skuInfo'];
+            $price = json_decode(self::curlGet($priceUri),true)[0];         // 商品价格数据集合
+            $info = json_decode(self::curlGet($infoUri),true)['skuInfo'];   // 商品信息数据集合
             
             // 处理curl请求异常
             while(empty($info)){
                 $info = json_decode(self::curlGet($infoUri),true)['skuInfo'];
             }
             
-
             $result[] = [
                 'sku' => $skuID,                                     // 京东商品标识ID
                 'priceNormal' => $price['p'],                        // 售价
@@ -136,11 +177,18 @@ class jds {
         }
 
         return $result;
-
+    
     }
 
 
-    // 模拟百度蜘蛛进行curl
+
+    /**
+     * curlGet
+     * @method          get请求 
+     * @param  str $uri 请求地址
+     *
+     * @return str      页面DOM
+     */
     private function curlGet($uri){
         $ch = curl_init();
 
@@ -164,11 +212,19 @@ class jds {
     }
     
 
-    // 保存json预览文件
+
+    /**
+     * getJsonFile      本地保存sku文件
+     * @method                
+     * @param   json    sku数据
+     *
+     * @return  empty   无返回数据
+     */
     private function getJsonFile($json){
         is_dir($this->jsonDir) || mkdir($this->jsonDir, 0755);
         file_put_contents($this->jsonDir.'/'.time().'.json',$json);
     }
 
 
+    
 }
