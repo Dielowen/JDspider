@@ -1,5 +1,5 @@
 <?php
-// 引入操作类别
+// 引入操作  类 别
 require 'src/JDS.class.php';
 
 // 设置脚本运行时间
